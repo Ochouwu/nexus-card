@@ -1,0 +1,182 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Nexus Card</title>
+  <link rel="icon" type="image/png" href="favicon.png" />
+</head>
+<body style="font-family:sans-serif; background:#1a1a1a; color:white; text-align:center; padding:2rem;">
+
+  <div id="login">
+    <h1><img src="logo.png" alt="Logo" style="width:30px; vertical-align:middle; margin-right:8px;">Login</h1>
+    <input style="padding:8px; margin:6px; border-radius:8px; border:none;" type="text" id="inputID" placeholder="Ingresa tu ID" />
+    <br/><br/>
+    <button style="padding:10px 20px; margin:8px; border-radius:8px; border:none; background:#444; color:white; cursor:pointer;" id="entrarBtn">Entrar</button>
+    <br/><br/>
+    <button style="padding:10px 20px; margin:8px; border-radius:8px; border:none; background:#444; color:white; cursor:pointer;" id="adminBtn">🔒 Modo administrador</button>
+    <p id="msgAcceso"></p>
+  </div>
+
+  <form id="formulario" class="hidden" style="display:none; flex-direction:column; align-items:center;">
+    <h2><img src="logo.png" alt="Logo" style="width:30px; vertical-align:middle; margin-right:8px;">Solicitar Nexus Card</h2>
+    <input style="padding:8px; margin:6px; border-radius:8px; border:none;" type="text" id="id" placeholder="ID" required><br/>
+    <input style="padding:8px; margin:6px; border-radius:8px; border:none;" type="text" id="apodo" placeholder="Apodo" required><br/>
+    <input style="padding:8px; margin:6px; border-radius:8px; border:none;" type="text" id="usuario" placeholder="Usuario" required><br/>
+    <input style="padding:8px; margin:6px; border-radius:8px; border:none;" type="text" id="pais" placeholder="País" required><br/>
+    <input style="padding:8px; margin:6px; border-radius:8px; border:none;" type="date" id="nacimiento" required><br/>
+    <input style="padding:8px; margin:6px; border-radius:8px; border:none;" type="file" id="imagen" accept="image/*" required><br/>
+    <button style="padding:10px 20px; margin:8px; border-radius:8px; border:none; background:#444; color:white; cursor:pointer;" type="submit">Enviar solicitud</button>
+    <p id="mensaje"></p>
+  </form>
+
+  <div id="admin" class="hidden" style="display:none; flex-direction:column; align-items:center;">
+    <h2>Solicitudes recibidas</h2>
+    <div id="solicitudes"></div>
+  </div>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
+  import { getFirestore, collection, getDocs, setDoc, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyDqk6oERAq0SyC8lTqilWNQRDb-HWiHV6U",
+    authDomain: "nexus-club-770fd.firebaseapp.com",
+    projectId: "nexus-club-770fd",
+    storageBucket: "nexus-club-770fd.appspot.com",
+    messagingSenderId: "1042965614720",
+    appId: "1:1042965614720:web:64908a801e59fd6bb75665",
+    measurementId: "G-HRZR1ELR7Z"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+
+  const autorizados = ["676640620852281364"];
+
+  document.getElementById("entrarBtn").addEventListener("click", async () => {
+    const id = document.getElementById("inputID").value.trim();
+    if (!autorizados.includes(id)) {
+      document.getElementById("msgAcceso").textContent = "❌ Acceso no autorizado";
+      return;
+    }
+
+    const docRef = doc(db, "solicitudes", id);
+    const docSnap = await getDoc(docRef);
+
+    if (!docSnap.exists()) {
+      document.getElementById("login").style.display = "none";
+      document.getElementById("formulario").style.display = "flex";
+      document.getElementById("id").value = id;
+      return;
+    }
+
+    const estado = docSnap.data().estado;
+    if (estado === "Eliminado") {
+      document.getElementById("msgAcceso").textContent = "❌ Acceso no autorizado";
+    } else if (estado === "Pendiente") {
+      document.getElementById("msgAcceso").textContent = "⏳ Tu solicitud está pendiente de aprobación";
+    } else if (estado === "Aprobado") {
+      document.getElementById("msgAcceso").textContent = "✅ Tu solicitud fue aprobada";
+    }
+  });
+
+  document.getElementById("adminBtn").addEventListener("click", () => {
+    const clave = prompt("Ingresa la clave de administrador:");
+    if (clave === "Prefijo_123") {
+      document.getElementById("admin").style.display = "flex";
+      cargarAdmin();
+    } else {
+      alert("Clave incorrecta");
+    }
+  });
+
+  document.getElementById("formulario").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const id = document.getElementById("id").value.trim();
+    const apodo = document.getElementById("apodo").value.trim();
+    const usuario = document.getElementById("usuario").value.trim();
+    const pais = document.getElementById("pais").value.trim();
+    const nacimiento = document.getElementById("nacimiento").value;
+    const imagen = document.getElementById("imagen").files[0];
+
+    if (!imagen) return;
+
+    const reader = new FileReader();
+    reader.onload = async function () {
+      const img = new Image();
+      img.src = reader.result;
+      img.onload = async () => {
+        const canvas = document.createElement("canvas");
+        const maxSize = 600;
+        const scale = Math.min(maxSize / img.width, maxSize / img.height);
+        canvas.width = img.width * scale;
+        canvas.height = img.height * scale;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        const compressedBase64 = canvas.toDataURL("image/jpeg", 0.7);
+
+        await setDoc(doc(db, "solicitudes", id), {
+          id, apodo, usuario, pais, nacimiento,
+          imagen: compressedBase64,
+          estado: "Pendiente"
+        });
+        document.getElementById("mensaje").textContent = "✅ Solicitud enviada para aprobación";
+      };
+    };
+    reader.readAsDataURL(imagen);
+  });
+
+  async function cargarAdmin() {
+    const cont = document.getElementById("solicitudes");
+    cont.innerHTML = "";
+    const snap = await getDocs(collection(db, "solicitudes"));
+    snap.forEach((docSnap) => {
+      const d = docSnap.data();
+      const div = document.createElement("div");
+      div.innerHTML = `
+        <p><strong>ID:</strong> ${d.id}</p>
+        <p><strong>Apodo:</strong> ${d.apodo}</p>
+        <p><strong>Usuario:</strong> ${d.usuario}</p>
+        <p><strong>País:</strong> ${d.pais}</p>
+        <p><strong>Nacimiento:</strong> ${d.nacimiento}</p>
+        <p><strong>Estado:</strong> ${d.estado}</p>
+        <img src="${d.imagen}" style="max-width:200px;"><br/>
+        <div class="acciones">
+          ${d.estado === "Pendiente" ? `<button style="padding:10px 20px; margin:8px; border-radius:8px; border:none; background:#444; color:white; cursor:pointer;" class="aprobar-btn" data-id="${docSnap.id}">Aprobar</button>` : `<span style="color:green;">✅ Aprobado</span>`}
+          <button style="padding:10px 20px; margin:8px; border-radius:8px; border:none; background:#444; color:white; cursor:pointer;" class="eliminar-btn" data-id="${docSnap.id}">Eliminar</button>
+          <a href="${d.imagen}" download="imagen_${d.id}.jpg"><button style="padding:10px 20px; margin:8px; border-radius:8px; border:none; background:#444; color:white; cursor:pointer;">Descargar imagen</button></a>
+        </div>
+        <hr style="border:1px solid #333; width:80%;"/>
+      `;
+      cont.appendChild(div);
+    });
+  }
+
+  document.addEventListener("click", async (e) => {
+    if (e.target.classList.contains("aprobar-btn")) {
+      const id = e.target.getAttribute("data-id");
+      const ref = doc(db, "solicitudes", id);
+      const snap = await getDoc(ref);
+      if (snap.exists()) {
+        const d = snap.data();
+        await setDoc(ref, { ...d, estado: "Aprobado" });
+        e.target.outerHTML = `<span style="color:green;">✅ Aprobado</span>`;
+      }
+    }
+
+    if (e.target.classList.contains("eliminar-btn")) {
+      const id = e.target.getAttribute("data-id");
+      const ref = doc(db, "solicitudes", id);
+      const snap = await getDoc(ref);
+      if (snap.exists()) {
+        const d = snap.data();
+        await setDoc(ref, { ...d, estado: "Eliminado" });
+        e.target.outerHTML = `<span style="color:red;">🗑️ Eliminado</span>`;
+      }
+    }
+  });
+</script>
+</body>
+</html>
